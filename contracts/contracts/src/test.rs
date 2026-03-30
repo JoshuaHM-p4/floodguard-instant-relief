@@ -34,11 +34,12 @@ fn setup_test() -> (Env, FloodGuardContractClient, Address, Address, token::Clie
 fn test_1_happy_path_claim() {
     let (_env, client, _admin, user, token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     client.set_flood_status(&true);
     
     // User claims funds
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 
     // Verify user received 50 USDC
     assert_eq!(token_client.balance(&user), 50_0000000);
@@ -47,25 +48,27 @@ fn test_1_happy_path_claim() {
 #[test]
 #[should_panic(expected = "Flood status is not critical yet.")]
 fn test_2_edge_case_premature_claim() {
-    let (_env, client, _admin, user, _token_client) = setup_test();
+    let (env, client, _admin, user, _token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     // Notice we do NOT set flood status to true here
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 }
 
 #[test]
 fn test_3_state_verification_after_claim() {
     let (env, client, _admin, user, _token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     client.set_flood_status(&true);
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 
     // Use a direct storage check to verify state
     // We expect the contract to panic if they try to claim again
     let result = std::panic::catch_unwind(|| {
-        client.claim_relief(&user);
+        client.claim_relief(&user, &resident_id);
     });
     
     assert!(result.is_err(), "Contract should panic when claiming twice, verifying state was saved.");
@@ -77,8 +80,9 @@ fn test_4_unregistered_user_cannot_claim() {
     let (env, client, _admin, _user, _token_client) = setup_test();
     let unregistered_user = Address::generate(&env);
 
+    let resident_id = String::from_str(&env, "ANY_ID");
     client.set_flood_status(&true);
-    client.claim_relief(&unregistered_user);
+    client.claim_relief(&unregistered_user, &resident_id);
 }
 
 #[test]
