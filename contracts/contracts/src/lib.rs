@@ -1,6 +1,5 @@
-mod test;
-
 #![no_std]
+mod test;
 use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol, symbol_short};
 
 #[contracttype]
@@ -69,7 +68,7 @@ impl FloodGuardContract {
 
         // 4. Transfer USDC from the contract to the user
         let token_id: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let client = token::Client::new(&env, &token_id);
+        let client = soroban_sdk::token::Client::new(&env, &token_id);
         client.transfer(&env.current_contract_address(), &user, &RELIEF_AMOUNT);
 
         // 5. Update claim state
