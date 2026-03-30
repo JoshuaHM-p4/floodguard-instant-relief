@@ -1,0 +1,28 @@
+# Rust
+/target
+/contracts/target
+**/*.rs.bk
+
+# Node.js
+node_modules/
+dist/
+build/
+.npm/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Stellar/Soroban
+.soroban/

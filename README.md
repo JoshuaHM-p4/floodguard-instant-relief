@@ -52,6 +52,7 @@ Admin Address: `admin` (Your local identity)
 Token ID: `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` (Native Asset)
 
 Transaction Link: View Initialization on [Stellar.Expert](https://stellar.expert/explorer/testnet/tx/78fed873c7429d663ee4f3b4887616c8a8d584e8d467c96716ef0bc3cc484693)
+![Contractkk](assets/screenshot.png)
 
 ---
 
