@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-path = "contracts/contract/src/lib.rs"
+path = "contracts/src/lib.rs"
 
 [features]
 testutils = ["soroban-sdk/testutils"]

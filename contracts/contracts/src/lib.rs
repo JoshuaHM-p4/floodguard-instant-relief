@@ -1,6 +1,6 @@
 #![no_std]
 mod test;
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol, symbol_short};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
 
 #[contracttype]
 pub enum DataKey {
@@ -73,5 +73,20 @@ impl FloodGuardContract {
 
         // 5. Update claim state
         env.storage().persistent().set(&DataKey::Claimed(user.clone()), &true);
+    }
+
+    /// Read-only: Get current flood status.
+    pub fn get_flood_status(env: Env) -> bool {
+        env.storage().instance().get(&DataKey::FloodStatus).unwrap_or(false)
+    }
+
+    /// Read-only: Check if user is registered.
+    pub fn is_registered(env: Env, user: Address) -> bool {
+        env.storage().persistent().get(&DataKey::Registered(user)).unwrap_or(false)
+    }
+
+    /// Read-only: Check if user has claimed relief.
+    pub fn has_claimed(env: Env, user: Address) -> bool {
+        env.storage().persistent().get(&DataKey::Claimed(user)).unwrap_or(false)
     }
 }
