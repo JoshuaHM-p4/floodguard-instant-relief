@@ -1,7 +1,7 @@
 import {
   isAllowed,
   setAllowed,
-  getUserInfo,
+  getAddress,
   signTransaction,
 } from "@stellar/freighter-api";
 import * as StellarSdk from "@stellar/stellar-sdk";
@@ -10,21 +10,23 @@ const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID!;
 const NETWORK_PASSPHRASE = StellarSdk.Networks.TESTNET;
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://soroban-testnet.stellar.org:443";
 
-export const server = new StellarSdk.SorobanRpc.Server(RPC_URL);
+export const server = new StellarSdk.rpc.Server(RPC_URL);
 
 export async function checkConnection() {
-  return await isAllowed();
+  const result = await isAllowed();
+  return result.isAllowed;
 }
 
 export async function connectWallet() {
-  if (await isAllowed()) {
-    const userInfo = await getUserInfo();
-    return userInfo.publicKey;
+  const allowed = await isAllowed();
+  if (allowed.isAllowed) {
+    const { address } = await getAddress();
+    return address;
   } else {
-    const allowed = await setAllowed();
-    if (allowed) {
-      const userInfo = await getUserInfo();
-      return userInfo.publicKey;
+    const setAllowedRes = await setAllowed();
+    if (setAllowedRes.isAllowed) {
+      const { address } = await getAddress();
+      return address;
     }
   }
   return null;
@@ -43,7 +45,7 @@ export async function getFloodStatus(): Promise<boolean> {
       .build()
     );
 
-    if (StellarSdk.SorobanRpc.Api.isSimulationSuccess(result)) {
+    if (StellarSdk.rpc.Api.isSimulationSuccess(result)) {
       return StellarSdk.scValToNative(result.result!.retval) as boolean;
     }
     return false;
@@ -65,7 +67,7 @@ export async function isUserRegistered(userAddress: string): Promise<boolean> {
       .build()
     );
 
-    if (StellarSdk.SorobanRpc.Api.isSimulationSuccess(result)) {
+    if (StellarSdk.rpc.Api.isSimulationSuccess(result)) {
       return StellarSdk.scValToNative(result.result!.retval) as boolean;
     }
     return false;
@@ -87,7 +89,7 @@ export async function hasUserClaimed(userAddress: string): Promise<boolean> {
       .build()
     );
 
-    if (StellarSdk.SorobanRpc.Api.isSimulationSuccess(result)) {
+    if (StellarSdk.rpc.Api.isSimulationSuccess(result)) {
       return StellarSdk.scValToNative(result.result!.retval) as boolean;
     }
     return false;
@@ -111,12 +113,12 @@ export async function claimRelief(userAddress: string) {
     .build();
 
     const simulation = await server.simulateTransaction(tx);
-    if (!StellarSdk.SorobanRpc.Api.isSimulationSuccess(simulation)) {
+    if (!StellarSdk.rpc.Api.isSimulationSuccess(simulation)) {
         throw new Error("Simulation failed");
     }
 
-    const assembledTx = StellarSdk.assembleTransaction(tx, simulation);
-    const signedTxXdr = await signTransaction(assembledTx.toXDR(), {
+    const assembledTx = StellarSdk.rpc.assembleTransaction(tx, simulation);
+    const { signedTxXdr } = await signTransaction(assembledTx.build().toXDR(), {
       networkPassphrase: NETWORK_PASSPHRASE,
     });
 

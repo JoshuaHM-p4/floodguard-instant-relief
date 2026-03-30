@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Shield, Users, AlertTriangle, Loader2, CheckCircle, Droplets, Wallet } from "lucide-react";
+import { Shield, Users, AlertTriangle, Loader2, CheckCircle, Droplets, Wallet, Info } from "lucide-react";
 import { connectWallet, server } from "@/lib/stellar";
 import * as StellarSdk from "@stellar/stellar-sdk";
 
@@ -36,13 +36,13 @@ export default function AdminPage() {
       .build();
 
       const simulation = await server.simulateTransaction(tx);
-      if (!StellarSdk.SorobanRpc.Api.isSimulationSuccess(simulation)) {
-          throw new Error("Simulation failed: " + JSON.stringify(simulation.result));
+      if (!StellarSdk.rpc.Api.isSimulationSuccess(simulation)) {
+          throw new Error("Simulation failed: " + JSON.stringify(simulation));
       }
 
-      const assembledTx = StellarSdk.assembleTransaction(tx, simulation);
+      const assembledTx = StellarSdk.rpc.assembleTransaction(tx, simulation);
       const { signTransaction } = await import("@stellar/freighter-api");
-      const signedTxXdr = await signTransaction(assembledTx.toXDR(), {
+      const { signedTxXdr } = await signTransaction(assembledTx.build().toXDR(), {
         networkPassphrase: NETWORK_PASSPHRASE,
       });
 
