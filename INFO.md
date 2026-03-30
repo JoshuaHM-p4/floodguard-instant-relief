@@ -54,7 +54,8 @@ Here is the complete, compile-ready codebase for the FloodGuard MVP.
 
 ```rust
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol, symbol_short};
+mod test;
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 
 #[contracttype]
 pub enum DataKey {
@@ -63,6 +64,7 @@ pub enum DataKey {
     FloodStatus,
     Registered(Address),
     Claimed(Address),
+    ResidentId(Address),
 }
 
 const RELIEF_AMOUNT: i128 = 50_0000000; // 50 USDC (assuming 7 decimals)
@@ -80,13 +82,14 @@ impl FloodGuardContract {
         env.storage().instance().set(&DataKey::FloodStatus, &false);
     }
 
-    /// Admin registers a vulnerable resident's wallet to be eligible for relief.
-    pub fn register_user(env: Env, user: Address) {
+    /// Admin registers a vulnerable resident's wallet with an ID to be eligible for relief.
+    pub fn register_user(env: Env, user: Address, resident_id: String) {
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         admin.require_auth();
         
-        // Mark user as registered
+        // Mark user as registered and store their ID
         env.storage().persistent().set(&DataKey::Registered(user.clone()), &true);
+        env.storage().persistent().set(&DataKey::ResidentId(user.clone()), &resident_id);
         // Initialize claim status as false
         env.storage().persistent().set(&DataKey::Claimed(user), &false);
     }
@@ -99,7 +102,8 @@ impl FloodGuardContract {
     }
 
     /// Registered user claims their emergency USDC when flood status is critical.
-    pub fn claim_relief(env: Env, user: Address) {
+    /// Requires providing the correct Resident ID for simple verification.
+    pub fn claim_relief(env: Env, user: Address, provided_id: String) {
         user.require_auth();
 
         // 1. Check if flood is critical
@@ -114,19 +118,40 @@ impl FloodGuardContract {
             panic!("User is not registered for relief.");
         }
 
-        // 3. Check if user already claimed
+        // 3. Verify ID
+        let actual_id: String = env.storage().persistent().get(&DataKey::ResidentId(user.clone())).unwrap();
+        if actual_id != provided_id {
+            panic!("Invalid Resident ID provided.");
+        }
+
+        // 4. Check if user already claimed
         let has_claimed: bool = env.storage().persistent().get(&DataKey::Claimed(user.clone())).unwrap_or(false);
         if has_claimed {
             panic!("User has already claimed relief funds.");
         }
 
-        // 4. Transfer USDC from the contract to the user
+        // 5. Transfer USDC from the contract to the user
         let token_id: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
-        let client = token::Client::new(&env, &token_id);
+        let client = soroban_sdk::token::Client::new(&env, &token_id);
         client.transfer(&env.current_contract_address(), &user, &RELIEF_AMOUNT);
 
-        // 5. Update claim state
+        // 6. Update claim state
         env.storage().persistent().set(&DataKey::Claimed(user.clone()), &true);
+    }
+
+    /// Read-only: Check if user is registered.
+    pub fn is_registered(env: Env, user: Address) -> bool {
+        env.storage().persistent().get(&DataKey::Registered(user)).unwrap_or(false)
+    }
+
+    /// Read-only: Get resident ID for a registered user.
+    pub fn get_resident_id(env: Env, user: Address) -> String {
+        env.storage().persistent().get(&DataKey::ResidentId(user)).unwrap_or(String::from_str(&env, ""))
+    }
+
+    /// Read-only: Check if user has claimed relief.
+    pub fn has_claimed(env: Env, user: Address) -> bool {
+        env.storage().persistent().get(&DataKey::Claimed(user)).unwrap_or(false)
     }
 }
 ```
@@ -168,13 +193,14 @@ fn setup_test() -> (Env, FloodGuardContractClient, Address, Address, token::Clie
 
 #[test]
 fn test_1_happy_path_claim() {
-    let (_env, client, _admin, user, token_client) = setup_test();
+    let (env, client, _admin, user, token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     client.set_flood_status(&true);
     
     // User claims funds
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 
     // Verify user received 50 USDC
     assert_eq!(token_client.balance(&user), 50_0000000);
@@ -183,25 +209,27 @@ fn test_1_happy_path_claim() {
 #[test]
 #[should_panic(expected = "Flood status is not critical yet.")]
 fn test_2_edge_case_premature_claim() {
-    let (_env, client, _admin, user, _token_client) = setup_test();
+    let (env, client, _admin, user, _token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     // Notice we do NOT set flood status to true here
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 }
 
 #[test]
 fn test_3_state_verification_after_claim() {
     let (env, client, _admin, user, _token_client) = setup_test();
 
-    client.register_user(&user);
+    let resident_id = String::from_str(&env, "RES123");
+    client.register_user(&user, &resident_id);
     client.set_flood_status(&true);
-    client.claim_relief(&user);
+    client.claim_relief(&user, &resident_id);
 
     // Use a direct storage check to verify state
     // We expect the contract to panic if they try to claim again
     let result = std::panic::catch_unwind(|| {
-        client.claim_relief(&user);
+        client.claim_relief(&user, &resident_id);
     });
     
     assert!(result.is_err(), "Contract should panic when claiming twice, verifying state was saved.");
@@ -213,21 +241,21 @@ fn test_4_unregistered_user_cannot_claim() {
     let (env, client, _admin, _user, _token_client) = setup_test();
     let unregistered_user = Address::generate(&env);
 
+    let resident_id = String::from_str(&env, "ANY_ID");
     client.set_flood_status(&true);
-    client.claim_relief(&unregistered_user);
+    client.claim_relief(&unregistered_user, &resident_id);
 }
 
 #[test]
-#[should_panic] // Panics because mock_auth requires admin, but we pass a different user
-fn test_5_unauthorized_cannot_set_status() {
-    let (env, client, _admin, _user, _token_client) = setup_test();
-    let fake_admin = Address::generate(&env);
-    
-    // Disable mock auth to test actual auth requirements
-    env.mock_auths(&[]);
-    
-    // This should fail because fake_admin is not the initialized admin
+#[should_panic(expected = "Invalid Resident ID provided.")]
+fn test_6_invalid_id_claim() {
+    let (env, client, _admin, user, _token_client) = setup_test();
+
+    let resident_id = String::from_str(&env, "RES123");
+    let wrong_id = String::from_str(&env, "WRONG");
+    client.register_user(&user, &resident_id);
     client.set_flood_status(&true);
+    client.claim_relief(&user, &wrong_id);
 }
 ```
 

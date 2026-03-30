@@ -13,6 +13,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [residentAddress, setResidentAddress] = useState("");
+  const [residentId, setResidentId] = useState("");
 
   const handleConnect = async () => {
     const pubKey = await connectWallet();
@@ -36,8 +37,10 @@ export default function AdminPage() {
       .build();
 
       const simulation = await server.simulateTransaction(tx);
+      console.log("Simulation Result:", simulation);
       if (!StellarSdk.rpc.Api.isSimulationSuccess(simulation)) {
-          throw new Error("Simulation failed: " + JSON.stringify(simulation));
+          const errorMsg = simulation.error || "Unknown simulation error";
+          throw new Error("Simulation failed: " + errorMsg);
       }
 
       const assembledTx = StellarSdk.rpc.assembleTransaction(tx, simulation);
@@ -74,15 +77,18 @@ export default function AdminPage() {
   };
 
   const setFloodStatus = (isCritical: boolean) => {
-    invokeContract("set_flood_status", [StellarSdk.nativeToScVal(isCritical)]);
+    invokeContract("set_flood_status", [StellarSdk.nativeToScVal(isCritical, { type: "bool" })]);
   };
 
   const registerResident = () => {
-    if (!residentAddress) return;
+    if (!residentAddress || !residentId) return;
     try {
-      const addr = new StellarSdk.Address(residentAddress);
-      invokeContract("register_user", [addr.toScVal()]);
+      invokeContract("register_user", [
+        new StellarSdk.Address(residentAddress).toScVal(),
+        StellarSdk.nativeToScVal(residentId, { type: "string" })
+      ]);
     } catch (e) {
+      console.error(e);
       setStatusMessage("Invalid Stellar address");
     }
   };
@@ -141,6 +147,11 @@ export default function AdminPage() {
               <h2 className="text-lg font-bold">Register Resident</h2>
             </div>
             <div className="space-y-4">
+              {!address && (
+                <div className="mb-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  <strong>Admin Wallet Not Connected:</strong> You must connect your wallet at the top right before you can register residents or trigger flood status changes.
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Stellar Wallet Address</label>
                 <input 
@@ -151,9 +162,19 @@ export default function AdminPage() {
                   className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-800"
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Resident ID (National ID / Govt ID)</label>
+                <input 
+                  type="text" 
+                  value={residentId}
+                  onChange={(e) => setResidentId(e.target.value)}
+                  placeholder="ID Number..." 
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-slate-800 dark:bg-slate-800"
+                />
+              </div>
               <button 
                 onClick={registerResident}
-                disabled={loading || !address || !residentAddress}
+                disabled={loading || !address || !residentAddress || !residentId}
                 className="w-full rounded-lg bg-blue-600 py-3 font-bold text-white transition-all hover:bg-blue-700 disabled:opacity-50"
               >
                 Register Resident

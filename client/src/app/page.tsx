@@ -15,6 +15,8 @@ export default function Home() {
   const [isCritical, setIsCritical] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   const [hasClaimed, setHasClaimed] = useState(false);
+  const [residentId, setResidentId] = useState("");
+  const [providedId, setProvidedId] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [statusMessage, setStatusMessage] = useState("");
@@ -30,6 +32,11 @@ export default function Home() {
         setIsRegistered(registered);
         const claimed = await hasUserClaimed(userAddress);
         setHasClaimed(claimed);
+        
+        if (registered) {
+          const id = await import("@/lib/stellar").then(m => m.getResidentId(userAddress));
+          setResidentId(id);
+        }
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -52,16 +59,16 @@ export default function Home() {
   };
 
   const handleClaim = async () => {
-    if (!address) return;
+    if (!address || !providedId) return;
     setLoading(true);
     setStatusMessage("Submitting claim to Stellar Testnet...");
     try {
-      await claimRelief(address);
+      await claimRelief(address, providedId);
       setHasClaimed(true);
       setStatusMessage("Success! 50 USDC has been sent to your wallet.");
     } catch (error) {
       console.error("Claim failed:", error);
-      setStatusMessage("Claim failed. Please try again.");
+      setStatusMessage("Claim failed. Please check your ID and try again.");
     } finally {
       setLoading(false);
     }
@@ -177,9 +184,27 @@ export default function Home() {
                 </div>
               </div>
 
+              {isRegistered && !hasClaimed && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-6 dark:border-blue-900/30 dark:bg-blue-900/10">
+                  <label className="mb-2 block text-sm font-bold text-blue-900 dark:text-blue-100">
+                    Resident Verification
+                  </label>
+                  <p className="mb-4 text-xs text-blue-700 dark:text-blue-300">
+                    Please enter your National ID or Resident ID assigned during registration to verify your claim.
+                  </p>
+                  <input 
+                    type="text" 
+                    value={providedId}
+                    onChange={(e) => setProvidedId(e.target.value)}
+                    placeholder="Enter Resident ID" 
+                    className="w-full rounded-lg border border-blue-200 bg-white px-4 py-3 text-sm font-medium focus:border-blue-500 focus:outline-none dark:border-blue-800 dark:bg-slate-900"
+                  />
+                </div>
+              )}
+
               <div className="pt-4">
                 <button 
-                  disabled={!isCritical || !isRegistered || hasClaimed || loading}
+                  disabled={!isCritical || !isRegistered || hasClaimed || loading || (isRegistered && !providedId)}
                   onClick={handleClaim}
                   className="w-full flex items-center justify-center gap-3 rounded-xl bg-blue-600 py-4 text-lg font-bold text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 hover:shadow-blue-500/40 active:scale-95 disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-slate-800"
                 >

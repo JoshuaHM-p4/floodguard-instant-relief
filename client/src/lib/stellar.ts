@@ -57,13 +57,12 @@ export async function getFloodStatus(): Promise<boolean> {
 
 export async function isUserRegistered(userAddress: string): Promise<boolean> {
   try {
-    const address = new StellarSdk.Address(userAddress);
     const result = await server.simulateTransaction(
       new StellarSdk.TransactionBuilder(
         new StellarSdk.Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "0"),
         { fee: "100", networkPassphrase: NETWORK_PASSPHRASE }
       )
-      .addOperation(contract.call("is_registered", address.toScVal()))
+      .addOperation(contract.call("is_registered", new StellarSdk.Address(userAddress).toScVal()))
       .build()
     );
 
@@ -79,13 +78,12 @@ export async function isUserRegistered(userAddress: string): Promise<boolean> {
 
 export async function hasUserClaimed(userAddress: string): Promise<boolean> {
   try {
-    const address = new StellarSdk.Address(userAddress);
     const result = await server.simulateTransaction(
       new StellarSdk.TransactionBuilder(
         new StellarSdk.Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "0"),
         { fee: "100", networkPassphrase: NETWORK_PASSPHRASE }
       )
-      .addOperation(contract.call("has_claimed", address.toScVal()))
+      .addOperation(contract.call("has_claimed", new StellarSdk.Address(userAddress).toScVal()))
       .build()
     );
 
@@ -99,16 +97,40 @@ export async function hasUserClaimed(userAddress: string): Promise<boolean> {
   }
 }
 
-export async function claimRelief(userAddress: string) {
+export async function getResidentId(userAddress: string): Promise<string> {
   try {
-    const address = new StellarSdk.Address(userAddress);
+    const result = await server.simulateTransaction(
+      new StellarSdk.TransactionBuilder(
+        new StellarSdk.Account("GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF", "0"),
+        { fee: "100", networkPassphrase: NETWORK_PASSPHRASE }
+      )
+      .addOperation(contract.call("get_resident_id", new StellarSdk.Address(userAddress).toScVal()))
+      .build()
+    );
+
+    if (StellarSdk.rpc.Api.isSimulationSuccess(result)) {
+      return StellarSdk.scValToNative(result.result!.retval) as string;
+    }
+    return "";
+  } catch (e) {
+    console.error("Error fetching resident ID:", e);
+    return "";
+  }
+}
+
+export async function claimRelief(userAddress: string, providedId: string) {
+  try {
     const account = await server.getAccount(userAddress);
     
     const tx = new StellarSdk.TransactionBuilder(account, {
       fee: "10000",
       networkPassphrase: NETWORK_PASSPHRASE,
     })
-    .addOperation(contract.call("claim_relief", address.toScVal()))
+    .addOperation(contract.call(
+      "claim_relief", 
+      new StellarSdk.Address(userAddress).toScVal(), 
+      StellarSdk.nativeToScVal(providedId, { type: "string" })
+    ))
     .setTimeout(30)
     .build();
 

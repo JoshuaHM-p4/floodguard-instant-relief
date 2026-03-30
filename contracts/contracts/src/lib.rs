@@ -1,6 +1,6 @@
 #![no_std]
 mod test;
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 
 #[contracttype]
 pub enum DataKey {
@@ -9,6 +9,7 @@ pub enum DataKey {
     FloodStatus,
     Registered(Address),
     Claimed(Address),
+    ResidentId(Address),
 }
 
 const RELIEF_AMOUNT: i128 = 50_0000000; // 50 USDC (assuming 7 decimals)
@@ -26,13 +27,14 @@ impl FloodGuardContract {
         env.storage().instance().set(&DataKey::FloodStatus, &false);
     }
 
-    /// Admin registers a vulnerable resident's wallet to be eligible for relief.
-    pub fn register_user(env: Env, user: Address) {
+    /// Admin registers a vulnerable resident's wallet with an ID to be eligible for relief.
+    pub fn register_user(env: Env, user: Address, resident_id: String) {
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         admin.require_auth();
         
-        // Mark user as registered
+        // Mark user as registered and store their ID
         env.storage().persistent().set(&DataKey::Registered(user.clone()), &true);
+        env.storage().persistent().set(&DataKey::ResidentId(user.clone()), &resident_id);
         // Initialize claim status as false
         env.storage().persistent().set(&DataKey::Claimed(user), &false);
     }
@@ -45,7 +47,8 @@ impl FloodGuardContract {
     }
 
     /// Registered user claims their emergency USDC when flood status is critical.
-    pub fn claim_relief(env: Env, user: Address) {
+    /// Requires providing the correct Resident ID for simple verification.
+    pub fn claim_relief(env: Env, user: Address, provided_id: String) {
         user.require_auth();
 
         // 1. Check if flood is critical
@@ -60,19 +63,35 @@ impl FloodGuardContract {
             panic!("User is not registered for relief.");
         }
 
-        // 3. Check if user already claimed
+        // 3. Verify ID
+        let actual_id: String = env.storage().persistent().get(&DataKey::ResidentId(user.clone())).unwrap();
+        if actual_id != provided_id {
+            panic!("Invalid Resident ID provided.");
+        }
+
+        // 4. Check if user already claimed
         let has_claimed: bool = env.storage().persistent().get(&DataKey::Claimed(user.clone())).unwrap_or(false);
         if has_claimed {
             panic!("User has already claimed relief funds.");
         }
 
-        // 4. Transfer USDC from the contract to the user
+        // 5. Transfer USDC from the contract to the user
         let token_id: Address = env.storage().instance().get(&DataKey::UsdcToken).unwrap();
         let client = soroban_sdk::token::Client::new(&env, &token_id);
         client.transfer(&env.current_contract_address(), &user, &RELIEF_AMOUNT);
 
-        // 5. Update claim state
+        // 6. Update claim state
         env.storage().persistent().set(&DataKey::Claimed(user.clone()), &true);
+    }
+
+    /// Read-only: Get the NGO admin address.
+    pub fn get_admin(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::Admin).unwrap()
+    }
+
+    /// Read-only: Get the USDC token address.
+    pub fn get_usdc_token(env: Env) -> Address {
+        env.storage().instance().get(&DataKey::UsdcToken).unwrap()
     }
 
     /// Read-only: Get current flood status.
@@ -83,6 +102,11 @@ impl FloodGuardContract {
     /// Read-only: Check if user is registered.
     pub fn is_registered(env: Env, user: Address) -> bool {
         env.storage().persistent().get(&DataKey::Registered(user)).unwrap_or(false)
+    }
+
+    /// Read-only: Get resident ID for a registered user.
+    pub fn get_resident_id(env: Env, user: Address) -> String {
+        env.storage().persistent().get(&DataKey::ResidentId(user)).unwrap_or(String::from_str(&env, ""))
     }
 
     /// Read-only: Check if user has claimed relief.
